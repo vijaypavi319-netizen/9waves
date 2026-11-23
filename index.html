@@ -9,7 +9,7 @@
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg) center/cover fixed no-repeat;min-height:100vh}
 header{background:var(--theme);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px}
-header h1{margin:0;font-size:1.3rem}header small{opacity:.85}
+header h1{margin:0;font-size:1.3rem;cursor:pointer;user-select:none}header small{opacity:.85}
 .btn{border:0;border-radius:12px;padding:10px 16px;font-weight:700;cursor:pointer;background:var(--theme);color:#fff;font-size:.95rem}
 .btn.alt{background:#eee;color:var(--ink)}.btn.dark{background:#111827}.btn.go{background:#e8590c}.btn.del{background:#b42318}
 .hero{background:linear-gradient(135deg,var(--theme),#f59f0b);color:#fff;padding:26px 18px 56px;border-radius:0 0 40px 40px}
@@ -29,14 +29,15 @@ input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radiu
 .inline{display:flex;gap:8px}.inline select{width:90px}.inline input{flex:1}
 .status{display:inline-block;padding:3px 10px;border-radius:10px;font-weight:700;font-size:.85rem;background:#fde68a}
 .empty{text-align:center;color:var(--muted);padding:30px}
+.qrbox{display:inline-block;padding:12px;background:#fff;border-radius:12px;border:1px solid #eee}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:20px;display:none;z-index:9}
 #sync{font-size:.75rem;opacity:.9}
 </style>
 </head>
 <body>
 <header>
-  <div><h1>🌊 9 Waves</h1><small>Fresh • Fusion • Live</small> <small id="sync">connecting…</small></div>
-  <button class="btn dark" id="adminBtn">Admin Login</button>
+  <div><h1 id="logo">🌊 9 Waves</h1><small>Fresh • Fusion • Live</small> <small id="sync">connecting…</small></div>
+  <button class="btn dark" id="adminBtn" style="display:none">Logout Admin</button>
 </header>
 <section class="hero">
   <h2>Crafted Flavors, Served Fresh at Your Table.</h2>
@@ -48,12 +49,15 @@ input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radiu
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 (function(){
 "use strict";
 
 /* ====== SETTINGS ====== */
-var ADMIN_PIN = "9waves";   // CHANGE THIS
+var ADMIN_PIN = "9waves";            // CHANGE THIS
+var UPI_ID = "8884275689@axl";
+var SHOP_NAME = "9 Waves";
 var FIREBASE_CONFIG = { databaseURL: "https://waves-restaurant-default-rtdb.firebaseio.com" };
 
 /* ====== STATE ====== */
@@ -61,10 +65,8 @@ var menu = {}, orders = {}, settings = {}, reviews = {};
 var tab = "menu";
 var isAdmin = false;
 try { isAdmin = sessionStorage.getItem("isAdmin") === "1"; } catch(e){}
-var cart = [], myOrders = [];
-try { cart = JSON.parse(localStorage.getItem("cart") || "[]"); } catch(e){}
-try { myOrders = JSON.parse(localStorage.getItem("myOrders") || "[]"); } catch(e){}
-
+function load(k){ try { var v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch(e){ return []; } }
+var cart = load("w9_cart"), myOrders = load("w9_orders");
 function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 function esc(s){ return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function toast(m){ var t = document.getElementById("toast"); t.textContent = m; t.style.display = "block"; setTimeout(function(){ t.style.display = "none"; }, 2200); }
@@ -94,7 +96,21 @@ function applyTheme(){
   document.body.style.backgroundImage = settings.bg ? "url(" + settings.bg + ")" : "none";
 }
 
-/* ====== IMAGE COMPRESSION (keeps database small) ====== */
+/* ====== HELPERS ====== */
+function siteUrl(){ return (location.origin + location.pathname).replace(/index\.html$/, ""); }
+function upiLink(amount){
+  return "upi://pay?pa=" + encodeURIComponent(UPI_ID) + "&pn=" + encodeURIComponent(SHOP_NAME) +
+    (amount ? "&am=" + amount : "") + "&cu=INR&tn=" + encodeURIComponent(SHOP_NAME + " order");
+}
+function makeQRs(){
+  if (typeof QRCode === "undefined") return;
+  var boxes = document.querySelectorAll("[data-qr]");
+  for (var i = 0; i < boxes.length; i++){
+    var el = boxes[i];
+    el.innerHTML = "";
+    new QRCode(el, { text: el.dataset.qr === "site" ? siteUrl() : upiLink(cartTotal()), width: 200, height: 200 });
+  }
+}
 function compress(file, maxW, q, cb){
   var r = new FileReader();
   r.onload = function(){
@@ -117,7 +133,7 @@ function renderTabs(){
   document.getElementById("tabs").innerHTML = t.map(function(x){
     return "<button data-tab='" + x[0] + "' class='" + (tab === x[0] ? "on" : "") + "'>" + x[1] + "</button>";
   }).join("");
-  document.getElementById("adminBtn").textContent = isAdmin ? "Logout Admin" : "Admin Login";
+  document.getElementById("adminBtn").style.display = isAdmin ? "inline-block" : "none";
 }
 
 function render(){
@@ -129,6 +145,7 @@ function render(){
   else if (tab === "cart") v.innerHTML = cartHTML();
   else if (tab === "orders") v.innerHTML = ordersHTML();
   else if (tab === "kitchen" && isAdmin) v.innerHTML = kitchenHTML();
+  makeQRs();
 }
 
 function adminPanel(){
@@ -136,7 +153,10 @@ function adminPanel(){
     "<div class='row'><b>Theme Color:</b><input type='color' id='themeColor' value='" + esc(settings.theme || "#6b4049") + "' style='width:70px'>" +
     "<button class='btn' data-act='applyTheme'>Apply</button><button class='btn alt' data-act='resetTheme'>Reset</button></div>" +
     "<p><b>🖼️ Background photo:</b><input type='file' accept='image/*' id='bgFile'></p>" +
-    "<p><b>📲 PhonePe/GPay QR photo:</b><input type='file' accept='image/*' id='qrFile'></p><hr>" +
+    "<p><b>📲 Your own PhonePe/GPay QR photo (optional):</b><br><small>If you skip this, a QR is made automatically from " + esc(UPI_ID) + "</small>" +
+    "<input type='file' accept='image/*' id='qrFile'>" + (settings.qr ? "<button class='btn del' data-act='delQr'>Remove uploaded QR</button>" : "") + "</p><hr>" +
+    "<h3>🪧 Stall QR (opens this website)</h3><p><small>Take a screenshot of this QR and stick it at your stall.</small></p>" +
+    "<div style='text-align:center'><div class='qrbox' data-qr='site'></div><p><small>" + esc(siteUrl()) + "</small></p></div><hr>" +
     "<h3>+ Add New Dish</h3>" +
     "<input id='dName' placeholder='Dish Name'><input id='dCat' placeholder='Category (Savory/Dessert/Beverage)'>" +
     "<input id='dPrice' type='number' placeholder='Price ₹'><textarea id='dDesc' rows='2' placeholder='Description'></textarea>" +
@@ -164,20 +184,24 @@ function cartTotal(){ return cart.reduce(function(s,c){ return s + Number(c.pric
 
 function cartHTML(){
   if (!cart.length) return "<div class='card empty'>Your cart is empty. Add dishes from the menu.</div>";
-  var h = "<div class='card'>" + cart.map(function(c,i){
+  var total = cartTotal();
+  return "<div class='card'>" + cart.map(function(c,i){
     return "<div class='row' style='margin-bottom:8px'><span>" + esc(c.name) + " × " + c.qty + "</span><span><b>₹" + (c.price * c.qty) + "</b> <button class='btn alt' data-act='rmCart' data-i='" + i + "'>✕</button></span></div>";
-  }).join("") + "<hr><div class='row'><b>Total</b><b class='price'>₹" + cartTotal() + "</b></div>" +
+  }).join("") + "<hr><div class='row'><b>Total</b><b class='price'>₹" + total + "</b></div>" +
   "<input id='cName' placeholder='Your name'><input id='cTable' placeholder='Table number / Stall'>" +
-  "<select id='cPay'><option value='UPI'>Pay via UPI (scan QR)</option><option value='Stall'>Pay at the stall</option></select>" +
-  (settings.qr ? "<div style='text-align:center'><p>Scan to pay:</p><img src='" + settings.qr + "' style='max-width:240px;width:100%;border-radius:12px'></div>" : "") +
-  "<button class='btn go' style='width:100%;margin-top:8px' data-act='placeOrder'>Place Order</button></div>";
-  return h;
+  "<select id='cPay'><option value='UPI'>Pay via UPI</option><option value='Stall'>Pay at the stall</option></select>" +
+  "<div style='text-align:center;margin-top:10px'><p><b>Pay ₹" + total + " to " + esc(UPI_ID) + "</b></p>" +
+  (settings.qr ? "<img src='" + settings.qr + "' style='max-width:240px;width:100%;border-radius:12px'>" : "<div class='qrbox' data-qr='upi'></div>") +
+  "<p><a class='btn go' style='display:inline-block;text-decoration:none' href='" + upiLink(total) + "'>Open UPI app</a> " +
+  "<button class='btn alt' data-act='copyUpi'>Copy UPI ID</button></p>" +
+  "<small>After paying, tap Place Order.</small></div>" +
+  "<button class='btn go' style='width:100%;margin-top:12px' data-act='placeOrder'>Place Order</button></div>";
 }
 
 function ordersHTML(){
   var mine = myOrders.filter(function(id){ return orders[id]; });
   if (!mine.length) return "<div class='card empty'>No orders from this device yet.</div>";
-  return mine.reverse().map(function(id){ return orderCard(id, false); }).join("");
+  return mine.slice().reverse().map(function(id){ return orderCard(id, false); }).join("");
 }
 
 function kitchenHTML(){
@@ -201,6 +225,10 @@ function orderCard(id, kitchen){
 var actions = {
   applyTheme: function(){ db.ref("settings/theme").set(document.getElementById("themeColor").value); toast("Theme applied"); },
   resetTheme: function(){ db.ref("settings/theme").set("#6b4049"); db.ref("settings/bg").remove(); toast("Theme reset"); },
+  delQr: function(){ db.ref("settings/qr").remove(); toast("Uploaded QR removed"); },
+  copyUpi: function(){
+    try { navigator.clipboard.writeText(UPI_ID); toast("UPI ID copied"); } catch(e){ toast(UPI_ID); }
+  },
   addDish: function(){
     var name = val("dName"), price = val("dPrice");
     if (!name || !price) return toast("Enter dish name and price");
@@ -216,10 +244,11 @@ var actions = {
   delDish: function(el){ if (confirm("Delete this dish?")) db.ref("menu/" + el.dataset.id).remove(); },
   addCart: function(el){
     var id = el.dataset.id, d = menu[id], f = cart.filter(function(c){ return c.id === id; })[0];
+    if (!d) return;
     if (f) f.qty++; else cart.push({id:id, name:d.name, price:d.price, qty:1});
-    save("cart", cart); renderTabs(); toast("Added to cart");
+    save("w9_cart", cart); renderTabs(); toast("Added to cart");
   },
-  rmCart: function(el){ cart.splice(Number(el.dataset.i), 1); save("cart", cart); render(); },
+  rmCart: function(el){ cart.splice(Number(el.dataset.i), 1); save("w9_cart", cart); render(); },
   postReview: function(el){
     var id = el.dataset.id, txt = document.getElementById("rv_" + id).value.trim();
     db.ref("reviews/" + id).push({stars:Number(document.getElementById("st_" + id).value), text:txt, ts:Date.now()});
@@ -231,8 +260,8 @@ var actions = {
     var ref = db.ref("orders").push();
     ref.set({name:name, table:table, pay:document.getElementById("cPay").value, items:cart, total:cartTotal(), status:"New", ts:Date.now()})
       .then(function(){
-        myOrders.push(ref.key); save("myOrders", myOrders);
-        cart = []; save("cart", cart); tab = "orders"; render(); toast("Order placed!");
+        myOrders.push(ref.key); save("w9_orders", myOrders);
+        cart = []; save("w9_cart", cart); tab = "orders"; render(); toast("Order placed!");
       }).catch(function(e){ toast("Failed: " + e.message); });
   },
   setStatus: function(el){ db.ref("orders/" + el.dataset.id + "/status").set(el.dataset.s); },
@@ -254,15 +283,25 @@ document.addEventListener("change", function(e){
   if (e.target.id === "qrFile") compress(f, 600, 0.8, function(d){ db.ref("settings/qr").set(d); toast("QR updated"); });
 });
 
+/* ====== HIDDEN ADMIN: tap the logo 5 times ====== */
+var taps = 0, tapTimer;
+document.getElementById("logo").addEventListener("click", function(){
+  taps++; clearTimeout(tapTimer); tapTimer = setTimeout(function(){ taps = 0; }, 2500);
+  if (taps >= 5){
+    taps = 0;
+    if (isAdmin) return;
+    var p = prompt("Enter admin PIN:");
+    if (p === ADMIN_PIN){ isAdmin = true; try { sessionStorage.setItem("isAdmin","1"); } catch(e){} render(); toast("Admin mode on"); }
+    else if (p !== null) toast("Wrong PIN");
+  }
+});
 document.getElementById("adminBtn").addEventListener("click", function(){
-  if (isAdmin){ isAdmin = false; try { sessionStorage.removeItem("isAdmin"); } catch(e){} if (tab === "kitchen") tab = "menu"; render(); return; }
-  var p = prompt("Enter admin PIN:");
-  if (p === ADMIN_PIN){ isAdmin = true; try { sessionStorage.setItem("isAdmin","1"); } catch(e){} render(); }
-  else if (p !== null) toast("Wrong PIN");
+  isAdmin = false; try { sessionStorage.removeItem("isAdmin"); } catch(e){}
+  if (tab === "kitchen") tab = "menu"; render();
 });
 
 render();
 })();
 </script>
 </body>
-  </html>
+</html>
