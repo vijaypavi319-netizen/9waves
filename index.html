@@ -105,4 +105,7 @@ applyTheme();updateAdminUI();toggleAddress();toggleUPI();renderMenu(true);render
 </script>
 </body>
 </html>
+let isAdmin=localStorage.getItem("isAdmin")==="1",tapCnt=0,tapTimer=null,myOrderIds=JSON.parse(localStorage.getItem("myOrderIds")||"[]"),cart=JSON.parse(localStorage.getItem("cart")||"{}"),menuData=JSON.parse(localStorage.getItem("localMenu")||"null")||defaultMenu,ordersData=JSON.parse(localStorage.getItem("localOrders")||"{}"),themeData=JSON.parse(localStorage.getItem("localTheme")||'{"color":"#ea580c","bgImg":""}'),lastM="",lastO="";
+const esc=s=>!s?"":String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
 
