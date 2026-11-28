@@ -11,7 +11,7 @@ body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;c
 header{background:var(--theme);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 header h1{margin:0;font-size:1.3rem;cursor:pointer;user-select:none}header small{opacity:.85}
 .btn{border:0;border-radius:12px;padding:10px 16px;font-weight:700;cursor:pointer;background:var(--theme);color:#fff;font-size:.95rem}
-.btn.alt{background:#eee;color:var(--ink)}.btn.dark{background:#111827}.btn.go{background:#e8590c}.btn.del{background:#b42318}
+.btn.alt{background:#eee;color:var(--ink)}.btn.dark{background:#111827}.btn.go{background:#e8590c}.btn.del{background:#b42318}.btn.ok{background:#15803d}
 .hero{background:linear-gradient(135deg,var(--theme),#f59f0b);color:#fff;padding:26px 18px 56px;border-radius:0 0 40px 40px}
 .hero h2{margin:0 0 8px;font-size:1.8rem}.hero p{margin:0;opacity:.95}
 .tabs{display:flex;background:#fff;margin:-34px 14px 14px;border-radius:20px;padding:6px;box-shadow:0 4px 14px #0002;position:relative}
@@ -28,13 +28,12 @@ main{padding:0 14px 40px;max-width:760px;margin:auto}
 input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radius:14px;font-size:1rem;margin:5px 0;background:#fff}
 .inline{display:flex;gap:8px}.inline select{width:90px}.inline input{flex:1}
 .status{display:inline-block;padding:3px 10px;border-radius:10px;font-weight:700;font-size:.85rem;background:#fde68a}
+.paid{background:#bbf7d0}.pend{background:#fecaca}
 .empty{text-align:center;color:var(--muted);padding:30px}
 .qrbox{display:inline-block;padding:12px;background:#fff;border-radius:12px;border:1px solid #eee}
 .paybox{background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;text-align:center;margin-top:10px}
 .payamt{font-size:1.6rem;font-weight:800;color:#e8590c;margin:0}
-.apps{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
-.apps a{display:block;text-decoration:none;text-align:center;padding:12px 6px;border-radius:12px;font-weight:700;color:#fff;font-size:.95rem}
-.a1{background:#5f259f}.a2{background:#1a73e8}.a3{background:#00b9f1}.a4{background:#374151}
+.steps{text-align:left;margin:8px 0;padding-left:20px;line-height:1.6}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:20px;display:none;z-index:9}
 #sync{font-size:.75rem;opacity:.9}
 </style>
@@ -62,7 +61,7 @@ input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radiu
 /* ====== SETTINGS ====== */
 var ADMIN_PIN = "9waves";            // CHANGE THIS
 var UPI_ID = "8884275689@axl";
-var PAYEE_NAME = "PAVITHRA H R";     // must match the name on your bank / UPI account
+var PAYEE_NAME = "PAVITHRA H R";
 var FIREBASE_CONFIG = { databaseURL: "https://waves-restaurant-default-rtdb.firebaseio.com" };
 
 /* ====== STATE ====== */
@@ -103,11 +102,8 @@ function applyTheme(){
 
 /* ====== HELPERS ====== */
 function siteUrl(){ return (location.origin + location.pathname).replace(/index\.html$/, ""); }
-/* Only UPI ID + name (no amount / note) so banks don't block it */
-function payQuery(){
-  return "pa=" + encodeURIComponent(UPI_ID) + "&pn=" + encodeURIComponent(PAYEE_NAME) + "&cu=INR";
-}
-function upiLink(){ return "upi://pay?" + payQuery(); }
+/* QR holds only UPI ID + name (no amount / note) */
+function upiLink(){ return "upi://pay?pa=" + encodeURIComponent(UPI_ID) + "&pn=" + encodeURIComponent(PAYEE_NAME) + "&cu=INR"; }
 function makeQRs(){
   if (typeof QRCode === "undefined") return;
   var boxes = document.querySelectorAll("[data-qr]");
@@ -130,6 +126,9 @@ function compress(file, maxW, q, cb){
     im.src = r.result;
   };
   r.readAsDataURL(file);
+}
+function copyText(t, msg){
+  try { navigator.clipboard.writeText(t); toast(msg); } catch(e){ toast(t); }
 }
 
 /* ====== RENDER ====== */
@@ -159,7 +158,7 @@ function adminPanel(){
     "<div class='row'><b>Theme Color:</b><input type='color' id='themeColor' value='" + esc(settings.theme || "#6b4049") + "' style='width:70px'>" +
     "<button class='btn' data-act='applyTheme'>Apply</button><button class='btn alt' data-act='resetTheme'>Reset</button></div>" +
     "<p><b>🖼️ Background photo:</b><input type='file' accept='image/*' id='bgFile'></p>" +
-    "<p><b>📲 Your own PhonePe/GPay QR photo (recommended):</b><br><small>Screenshot your QR from PhonePe/GPay (Receive money) and upload it here. If you skip this, a QR is made from " + esc(UPI_ID) + "</small>" +
+    "<p><b>📲 Your own PhonePe/GPay QR photo (recommended):</b><br><small>In PhonePe tap your profile → My QR, screenshot it and upload here. If you skip this, a QR is made from " + esc(UPI_ID) + "</small>" +
     "<input type='file' accept='image/*' id='qrFile'>" + (settings.qr ? "<button class='btn del' data-act='delQr'>Remove uploaded QR</button>" : "") + "</p><hr>" +
     "<h3>🪧 Stall QR (opens this website)</h3><p><small>Take a screenshot of this QR and stick it at your stall.</small></p>" +
     "<div style='text-align:center'><div class='qrbox' data-qr='site'></div><p><small>" + esc(siteUrl()) + "</small></p></div><hr>" +
@@ -190,25 +189,21 @@ function cartTotal(){ return cart.reduce(function(s,c){ return s + Number(c.pric
 
 function cartHTML(){
   if (!cart.length) return "<div class='card empty'>Your cart is empty. Add dishes from the menu.</div>";
-  var total = cartTotal(), q = payQuery();
+  var total = cartTotal();
   return "<div class='card'>" + cart.map(function(c,i){
     return "<div class='row' style='margin-bottom:8px'><span>" + esc(c.name) + " × " + c.qty + "</span><span><b>₹" + (c.price * c.qty) + "</b> <button class='btn alt' data-act='rmCart' data-i='" + i + "'>✕</button></span></div>";
   }).join("") + "<hr><div class='row'><b>Total</b><b class='price'>₹" + total + "</b></div>" +
   "<input id='cName' placeholder='Your name'><input id='cTable' placeholder='Table number / Stall'>" +
   "<select id='cPay'><option value='UPI'>Pay via UPI</option><option value='Stall'>Pay at the stall</option></select>" +
   "<div class='paybox'><p class='payamt'>Pay ₹" + total + "</p>" +
-  "<p style='margin:6px 0'><b>Step 1:</b> tap your payment app<br><small>(on this phone)</small></p>" +
-  "<div class='apps'>" +
-    "<a class='a1' href='phonepe://pay?" + q + "'>PhonePe</a>" +
-    "<a class='a2' href='tez://upi/pay?" + q + "'>Google Pay</a>" +
-    "<a class='a3' href='paytmmp://pay?" + q + "'>Paytm</a>" +
-    "<a class='a4' href='upi://pay?" + q + "'>Other UPI app</a>" +
-  "</div>" +
-  "<p style='margin:6px 0'><b>Step 2:</b> type the amount <b>₹" + total + "</b> and pay.</p>" +
-  "<p style='margin:10px 0 4px'>Or scan with another phone, or pay to UPI ID:<br><b>" + esc(UPI_ID) + "</b></p>" +
+  "<ol class='steps'><li>Tap <b>Copy UPI ID</b> (or scan the QR below with another phone).</li>" +
+  "<li>Open PhonePe / GPay / Paytm → <b>Pay to UPI ID</b> → paste it.</li>" +
+  "<li>Enter amount <b>₹" + total + "</b> and pay.</li>" +
+  "<li>Type the Transaction ID below and tap Place Order.</li></ol>" +
+  "<p style='margin:6px 0'>UPI ID: <b>" + esc(UPI_ID) + "</b></p>" +
+  "<p><button class='btn alt' data-act='copyUpi'>Copy UPI ID</button> <button class='btn alt' data-act='copyAmt'>Copy amount</button></p>" +
   (settings.qr ? "<img src='" + settings.qr + "' style='max-width:240px;width:100%;border-radius:12px'>" : "<div class='qrbox' data-qr='upi'></div>") +
-  "<p><button class='btn alt' data-act='copyUpi'>Copy UPI ID</button></p>" +
-  "<p style='margin:0'><b>Step 3:</b> after paying, tap Place Order below.</p></div>" +
+  "<input id='cUtr' placeholder='Transaction ID / UTR (after paying)'></div>" +
   "<button class='btn go' style='width:100%;margin-top:12px' data-act='placeOrder'>Place Order</button></div>";
 }
 
@@ -227,11 +222,14 @@ function kitchenHTML(){
 function orderCard(id, kitchen){
   var o = orders[id];
   var items = (o.items || []).map(function(i){ return esc(i.name) + " × " + i.qty; }).join(", ");
+  var paidTag = o.paid ? "<span class='status paid'>✅ Paid</span>" : "<span class='status pend'>⏳ Payment pending</span>";
   var btns = kitchen ? ["New","Preparing","Ready","Served"].map(function(s){
     return "<button class='btn " + (o.status === s ? "go" : "alt") + "' data-act='setStatus' data-id='" + id + "' data-s='" + s + "'>" + s + "</button>";
-  }).join(" ") + " <button class='btn del' data-act='delOrder' data-id='" + id + "'>🗑</button>" : "";
+  }).join(" ") + (o.paid ? "" : " <button class='btn ok' data-act='setPaid' data-id='" + id + "'>Mark paid</button>") +
+  " <button class='btn del' data-act='delOrder' data-id='" + id + "'>🗑</button>" : "";
   return "<div class='card'><div class='row'><b>" + esc(o.name) + " • " + esc(o.table) + "</b><span class='status'>" + esc(o.status) + "</span></div>" +
     "<p>" + items + "</p><div class='row'><span>" + esc(o.pay) + " • " + new Date(o.ts).toLocaleString() + "</span><b>₹" + esc(o.total) + "</b></div>" +
+    "<p style='margin:8px 0 0'>" + paidTag + (o.utr ? " &nbsp;UTR: <b>" + esc(o.utr) + "</b>" : "") + "</p>" +
     (btns ? "<div style='margin-top:10px;display:flex;gap:6px;flex-wrap:wrap'>" + btns + "</div>" : "") + "</div>";
 }
 
@@ -240,9 +238,8 @@ var actions = {
   applyTheme: function(){ db.ref("settings/theme").set(document.getElementById("themeColor").value); toast("Theme applied"); },
   resetTheme: function(){ db.ref("settings/theme").set("#6b4049"); db.ref("settings/bg").remove(); toast("Theme reset"); },
   delQr: function(){ db.ref("settings/qr").remove(); toast("Uploaded QR removed"); },
-  copyUpi: function(){
-    try { navigator.clipboard.writeText(UPI_ID); toast("UPI ID copied"); } catch(e){ toast(UPI_ID); }
-  },
+  copyUpi: function(){ copyText(UPI_ID, "UPI ID copied"); },
+  copyAmt: function(){ copyText(String(cartTotal()), "Amount copied"); },
   addDish: function(){
     var name = val("dName"), price = val("dPrice");
     if (!name || !price) return toast("Enter dish name and price");
@@ -272,16 +269,17 @@ var actions = {
     var name = val("cName"), table = val("cTable");
     if (!name || !table) return toast("Enter your name and table");
     var ref = db.ref("orders").push();
-    ref.set({name:name, table:table, pay:document.getElementById("cPay").value, items:cart, total:cartTotal(), status:"New", ts:Date.now()})
+    ref.set({name:name, table:table, pay:document.getElementById("cPay").value, utr:val("cUtr"), paid:false, items:cart, total:cartTotal(), status:"New", ts:Date.now()})
       .then(function(){
         myOrders.push(ref.key); save("w9_orders", myOrders);
         cart = []; save("w9_cart", cart); tab = "orders"; render(); toast("Order placed!");
       }).catch(function(e){ toast("Failed: " + e.message); });
   },
   setStatus: function(el){ db.ref("orders/" + el.dataset.id + "/status").set(el.dataset.s); },
+  setPaid: function(el){ db.ref("orders/" + el.dataset.id + "/paid").set(true); toast("Marked as paid"); },
   delOrder: function(el){ if (confirm("Delete this order?")) db.ref("orders/" + el.dataset.id).remove(); }
 };
-function val(id){ return document.getElementById(id).value.trim(); }
+function val(id){ var e = document.getElementById(id); return e ? e.value.trim() : ""; }
 
 document.addEventListener("click", function(e){
   var t = e.target.closest("[data-tab],[data-act]");
