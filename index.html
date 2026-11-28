@@ -30,6 +30,8 @@ input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radiu
 .status{display:inline-block;padding:3px 10px;border-radius:10px;font-weight:700;font-size:.85rem;background:#fde68a}
 .empty{text-align:center;color:var(--muted);padding:30px}
 .qrbox{display:inline-block;padding:12px;background:#fff;border-radius:12px;border:1px solid #eee}
+.paybox{background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;text-align:center;margin-top:10px}
+.payamt{font-size:1.6rem;font-weight:800;color:#e8590c;margin:0}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:20px;display:none;z-index:9}
 #sync{font-size:.75rem;opacity:.9}
 </style>
@@ -98,9 +100,9 @@ function applyTheme(){
 
 /* ====== HELPERS ====== */
 function siteUrl(){ return (location.origin + location.pathname).replace(/index\.html$/, ""); }
-function upiLink(amount){
-  return "upi://pay?pa=" + encodeURIComponent(UPI_ID) + "&pn=" + encodeURIComponent(SHOP_NAME) +
-    (amount ? "&am=" + amount : "") + "&cu=INR&tn=" + encodeURIComponent(SHOP_NAME + " order");
+/* Plain UPI QR: only the UPI ID + name (no amount / note), so banks don't block it */
+function upiLink(){
+  return "upi://pay?pa=" + encodeURIComponent(UPI_ID) + "&pn=" + encodeURIComponent(SHOP_NAME);
 }
 function makeQRs(){
   if (typeof QRCode === "undefined") return;
@@ -108,7 +110,7 @@ function makeQRs(){
   for (var i = 0; i < boxes.length; i++){
     var el = boxes[i];
     el.innerHTML = "";
-    new QRCode(el, { text: el.dataset.qr === "site" ? siteUrl() : upiLink(cartTotal()), width: 200, height: 200 });
+    new QRCode(el, { text: el.dataset.qr === "site" ? siteUrl() : upiLink(), width: 200, height: 200 });
   }
 }
 function compress(file, maxW, q, cb){
@@ -153,7 +155,7 @@ function adminPanel(){
     "<div class='row'><b>Theme Color:</b><input type='color' id='themeColor' value='" + esc(settings.theme || "#6b4049") + "' style='width:70px'>" +
     "<button class='btn' data-act='applyTheme'>Apply</button><button class='btn alt' data-act='resetTheme'>Reset</button></div>" +
     "<p><b>🖼️ Background photo:</b><input type='file' accept='image/*' id='bgFile'></p>" +
-    "<p><b>📲 Your own PhonePe/GPay QR photo (optional):</b><br><small>If you skip this, a QR is made automatically from " + esc(UPI_ID) + "</small>" +
+    "<p><b>📲 Your own PhonePe/GPay QR photo (recommended):</b><br><small>If you skip this, a QR is made automatically from " + esc(UPI_ID) + "</small>" +
     "<input type='file' accept='image/*' id='qrFile'>" + (settings.qr ? "<button class='btn del' data-act='delQr'>Remove uploaded QR</button>" : "") + "</p><hr>" +
     "<h3>🪧 Stall QR (opens this website)</h3><p><small>Take a screenshot of this QR and stick it at your stall.</small></p>" +
     "<div style='text-align:center'><div class='qrbox' data-qr='site'></div><p><small>" + esc(siteUrl()) + "</small></p></div><hr>" +
@@ -190,11 +192,11 @@ function cartHTML(){
   }).join("") + "<hr><div class='row'><b>Total</b><b class='price'>₹" + total + "</b></div>" +
   "<input id='cName' placeholder='Your name'><input id='cTable' placeholder='Table number / Stall'>" +
   "<select id='cPay'><option value='UPI'>Pay via UPI</option><option value='Stall'>Pay at the stall</option></select>" +
-  "<div style='text-align:center;margin-top:10px'><p><b>Pay ₹" + total + " to " + esc(UPI_ID) + "</b></p>" +
+  "<div class='paybox'><p class='payamt'>Pay ₹" + total + "</p>" +
+  "<p style='margin:6px 0'>Scan this QR in any UPI app,<br>or pay to UPI ID: <b>" + esc(UPI_ID) + "</b></p>" +
   (settings.qr ? "<img src='" + settings.qr + "' style='max-width:240px;width:100%;border-radius:12px'>" : "<div class='qrbox' data-qr='upi'></div>") +
-  "<p><a class='btn go' style='display:inline-block;text-decoration:none' href='" + upiLink(total) + "'>Open UPI app</a> " +
-  "<button class='btn alt' data-act='copyUpi'>Copy UPI ID</button></p>" +
-  "<small>After paying, tap Place Order.</small></div>" +
+  "<p><button class='btn alt' data-act='copyUpi'>Copy UPI ID</button></p>" +
+  "<small>Enter the amount ₹" + total + " in your app. After paying, tap Place Order.</small></div>" +
   "<button class='btn go' style='width:100%;margin-top:12px' data-act='placeOrder'>Place Order</button></div>";
 }
 
