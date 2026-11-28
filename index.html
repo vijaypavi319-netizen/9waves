@@ -32,6 +32,9 @@ input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radiu
 .qrbox{display:inline-block;padding:12px;background:#fff;border-radius:12px;border:1px solid #eee}
 .paybox{background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:14px;text-align:center;margin-top:10px}
 .payamt{font-size:1.6rem;font-weight:800;color:#e8590c;margin:0}
+.apps{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.apps a{display:block;text-decoration:none;text-align:center;padding:12px 6px;border-radius:12px;font-weight:700;color:#fff;font-size:.95rem}
+.a1{background:#5f259f}.a2{background:#1a73e8}.a3{background:#00b9f1}.a4{background:#374151}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:20px;display:none;z-index:9}
 #sync{font-size:.75rem;opacity:.9}
 </style>
@@ -59,7 +62,7 @@ input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radiu
 /* ====== SETTINGS ====== */
 var ADMIN_PIN = "9waves";            // CHANGE THIS
 var UPI_ID = "8884275689@axl";
-var SHOP_NAME = "9 Waves";
+var PAYEE_NAME = "PAVITHRA H R";     // must match the name on your bank / UPI account
 var FIREBASE_CONFIG = { databaseURL: "https://waves-restaurant-default-rtdb.firebaseio.com" };
 
 /* ====== STATE ====== */
@@ -100,10 +103,11 @@ function applyTheme(){
 
 /* ====== HELPERS ====== */
 function siteUrl(){ return (location.origin + location.pathname).replace(/index\.html$/, ""); }
-/* Plain UPI QR: only the UPI ID + name (no amount / note), so banks don't block it */
-function upiLink(){
-  return "upi://pay?pa=" + encodeURIComponent(UPI_ID) + "&pn=" + encodeURIComponent(SHOP_NAME);
+/* Only UPI ID + name (no amount / note) so banks don't block it */
+function payQuery(){
+  return "pa=" + encodeURIComponent(UPI_ID) + "&pn=" + encodeURIComponent(PAYEE_NAME) + "&cu=INR";
 }
+function upiLink(){ return "upi://pay?" + payQuery(); }
 function makeQRs(){
   if (typeof QRCode === "undefined") return;
   var boxes = document.querySelectorAll("[data-qr]");
@@ -155,7 +159,7 @@ function adminPanel(){
     "<div class='row'><b>Theme Color:</b><input type='color' id='themeColor' value='" + esc(settings.theme || "#6b4049") + "' style='width:70px'>" +
     "<button class='btn' data-act='applyTheme'>Apply</button><button class='btn alt' data-act='resetTheme'>Reset</button></div>" +
     "<p><b>🖼️ Background photo:</b><input type='file' accept='image/*' id='bgFile'></p>" +
-    "<p><b>📲 Your own PhonePe/GPay QR photo (recommended):</b><br><small>If you skip this, a QR is made automatically from " + esc(UPI_ID) + "</small>" +
+    "<p><b>📲 Your own PhonePe/GPay QR photo (recommended):</b><br><small>Screenshot your QR from PhonePe/GPay (Receive money) and upload it here. If you skip this, a QR is made from " + esc(UPI_ID) + "</small>" +
     "<input type='file' accept='image/*' id='qrFile'>" + (settings.qr ? "<button class='btn del' data-act='delQr'>Remove uploaded QR</button>" : "") + "</p><hr>" +
     "<h3>🪧 Stall QR (opens this website)</h3><p><small>Take a screenshot of this QR and stick it at your stall.</small></p>" +
     "<div style='text-align:center'><div class='qrbox' data-qr='site'></div><p><small>" + esc(siteUrl()) + "</small></p></div><hr>" +
@@ -186,17 +190,25 @@ function cartTotal(){ return cart.reduce(function(s,c){ return s + Number(c.pric
 
 function cartHTML(){
   if (!cart.length) return "<div class='card empty'>Your cart is empty. Add dishes from the menu.</div>";
-  var total = cartTotal();
+  var total = cartTotal(), q = payQuery();
   return "<div class='card'>" + cart.map(function(c,i){
     return "<div class='row' style='margin-bottom:8px'><span>" + esc(c.name) + " × " + c.qty + "</span><span><b>₹" + (c.price * c.qty) + "</b> <button class='btn alt' data-act='rmCart' data-i='" + i + "'>✕</button></span></div>";
   }).join("") + "<hr><div class='row'><b>Total</b><b class='price'>₹" + total + "</b></div>" +
   "<input id='cName' placeholder='Your name'><input id='cTable' placeholder='Table number / Stall'>" +
   "<select id='cPay'><option value='UPI'>Pay via UPI</option><option value='Stall'>Pay at the stall</option></select>" +
   "<div class='paybox'><p class='payamt'>Pay ₹" + total + "</p>" +
-  "<p style='margin:6px 0'>Scan this QR in any UPI app,<br>or pay to UPI ID: <b>" + esc(UPI_ID) + "</b></p>" +
+  "<p style='margin:6px 0'><b>Step 1:</b> tap your payment app<br><small>(on this phone)</small></p>" +
+  "<div class='apps'>" +
+    "<a class='a1' href='phonepe://pay?" + q + "'>PhonePe</a>" +
+    "<a class='a2' href='tez://upi/pay?" + q + "'>Google Pay</a>" +
+    "<a class='a3' href='paytmmp://pay?" + q + "'>Paytm</a>" +
+    "<a class='a4' href='upi://pay?" + q + "'>Other UPI app</a>" +
+  "</div>" +
+  "<p style='margin:6px 0'><b>Step 2:</b> type the amount <b>₹" + total + "</b> and pay.</p>" +
+  "<p style='margin:10px 0 4px'>Or scan with another phone, or pay to UPI ID:<br><b>" + esc(UPI_ID) + "</b></p>" +
   (settings.qr ? "<img src='" + settings.qr + "' style='max-width:240px;width:100%;border-radius:12px'>" : "<div class='qrbox' data-qr='upi'></div>") +
   "<p><button class='btn alt' data-act='copyUpi'>Copy UPI ID</button></p>" +
-  "<small>Enter the amount ₹" + total + " in your app. After paying, tap Place Order.</small></div>" +
+  "<p style='margin:0'><b>Step 3:</b> after paying, tap Place Order below.</p></div>" +
   "<button class='btn go' style='width:100%;margin-top:12px' data-act='placeOrder'>Place Order</button></div>";
 }
 
